@@ -13,19 +13,18 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    mbedtls.addIncludePath(mbedtls_dep.path("include"));
-    inline for (srcs) |src|
-        mbedtls.addCSourceFile(.{
-            .file = mbedtls_dep.path(b.fmt("library/{s}", .{src})),
-            .flags = &.{},
-        });
+    mbedtls.root_module.addIncludePath(mbedtls_dep.path("include"));
+    mbedtls.root_module.addCSourceFiles(.{
+        .root = mbedtls_dep.path("library"),
+        .files = srcs,
+    });
 
     mbedtls.installHeadersDirectory(mbedtls_dep.path("include/mbedtls"), "mbedtls", .{});
     mbedtls.installHeadersDirectory(mbedtls_dep.path("include/psa"), "psa", .{});
     b.installArtifact(mbedtls);
 
     if (target.result.os.tag == .windows) {
-        mbedtls.linkSystemLibrary("bcrypt");
+        mbedtls.root_module.linkSystemLibrary("bcrypt", .{});
     }
 
     const selftest = b.addExecutable(.{
@@ -154,4 +153,5 @@ const srcs: []const []const u8 = &.{
     "cipher.c",
     "ecdsa.c",
     "nist_kw.c",
+    "pk_ecc.c",
 };
