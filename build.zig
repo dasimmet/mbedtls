@@ -9,35 +9,37 @@ pub fn build(b: *Build) void {
 
     const threading = b.option(bool, "threading", "Enable thread safety") orelse false;
 
-    const mbedtls = b.addLibrary(.{
+    const mbedtls = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    const lib = b.addLibrary(.{
         .name = "mbedtls",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        }),
+        .root_module = mbedtls,
     });
-    mbedtls.root_module.addIncludePath(mbedtls_dep.path("include"));
-    mbedtls.root_module.addCSourceFiles(.{
+    lib.installHeadersDirectory(mbedtls_dep.path("include/mbedtls"), "mbedtls", .{});
+    lib.installHeadersDirectory(mbedtls_dep.path("include/psa"), "psa", .{});
+    b.installArtifact(lib);
+
+    mbedtls.addIncludePath(mbedtls_dep.path("include"));
+    mbedtls.addCSourceFiles(.{
         .root = mbedtls_dep.path("library"),
         .files = srcs,
     });
     if (target.result.os.tag == .freebsd) {
         // Otherwise `explicit_bzero` cannot be found
-        mbedtls.root_module.addCMacro("__BSD_VISIBLE", "1");
+        mbedtls.addCMacro("__BSD_VISIBLE", "1");
     }
     if (threading) {
-        mbedtls.root_module.addCMacro("MBEDTLS_THREADING_C", "");
-        mbedtls.root_module.addCMacro("MBEDTLS_THREADING_PTHREAD", "");
+        mbedtls.addCMacro("MBEDTLS_THREADING_C", "");
+        mbedtls.addCMacro("MBEDTLS_THREADING_PTHREAD", "");
     }
 
-    mbedtls.installHeadersDirectory(mbedtls_dep.path("include/mbedtls"), "mbedtls", .{});
-    mbedtls.installHeadersDirectory(mbedtls_dep.path("include/psa"), "psa", .{});
-    b.installArtifact(mbedtls);
-
     if (target.result.os.tag == .windows) {
-        mbedtls.root_module.linkSystemLibrary("bcrypt", .{});
+        mbedtls.linkSystemLibrary("bcrypt", .{});
     }
 
     const selftest = b.addExecutable(.{
@@ -53,7 +55,7 @@ pub fn build(b: *Build) void {
         .file = mbedtls_dep.path("programs/test/selftest.c"),
         .flags = &.{},
     });
-    selftest.root_module.linkLibrary(mbedtls);
+    selftest.root_module.linkLibrary(lib);
     b.getInstallStep().dependOn(&selftest.step);
 
     const selftest_run = b.addRunArtifact(selftest);
